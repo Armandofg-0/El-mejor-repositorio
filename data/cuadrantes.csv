@@ -1,0 +1,81 @@
+id_cuadrante,id_comisaría_asociada,demanda_por_dia,comuna
+1,1,10,Santiago
+2,2,6,Santiago
+3,3,6,Santiago
+4,2,7,Santiago
+5,3,5,Santiago
+6,2,6,Santiago
+7,7,3,Santiago
+8,2,6,Santiago
+9,1,4,Santiago
+10,4,7,Santiago
+11,6,5,Santiago
+12,7,7,Santiago
+13,5,8,Santiago
+14,5,11,Santiago
+15,5,9,Santiago
+16,5,5,Santiago
+17,6,4,Santiago
+18,7,6,Santiago
+19,8,7,La Florida
+20,8,9,La Florida
+21,8,6,La Florida
+22,8,10,La Florida
+23,8,12,La Florida
+24,10,8,La Florida
+25,10,9,La Florida
+26,10,10,La Florida
+27,9,7,La Florida
+28,9,11,La Florida
+29,9,10,La Florida
+30,9,5,La Florida
+31,9,8,La Florida
+32,11,9,La Florida
+33,11,10,La Florida
+34,11,8,La Florida
+35,12,7,Macul
+36,12,4,Macul
+37,12,9,Macul
+38,12,6,Macul
+39,12,10,Macul
+40,12,12,Macul
+41,12,8,Macul
+42,12,9,Macul
+43,12,7,Macul
+44,12,8,Macul
+45,13,6,Ñuñoa
+46,13,8,Ñuñoa
+47,13,10,Ñuñoa
+48,13,9,Ñuñoa
+49,13,8,Ñuñoa
+50,13,7,Ñuñoa
+51,13,6,Ñuñoa
+52,13,6,Ñuñoa
+53,14,4,Ñuñoa
+54,14,9,Ñuñoa
+55,14,10,Ñuñoa
+56,14,12,Ñuñoa
+57,14,9,Ñuñoa
+58,14,10,Ñuñoa
+59,14,7,Ñuñoa
+60,14,9,Ñuñoa
+61,14,6,Ñuñoa
+62,15,8,San Joaquin
+63,15,5,San Joaquin
+64,15,8,San Joaquin
+65,15,9,San Joaquin
+66,15,8,San Joaquin
+67,15,6,San Joaquin
+68,15,5,San Joaquin
+69,16,7,San Miguel
+70,16,9,San Miguel
+71,16,7,San Miguel
+72,16,10,San Miguel
+73,16,7,San Miguel
+74,16,5,San Miguel
+75,17,7,La Granja
+76,17,6,La Granja
+77,18,7,La Granja
+78,18,8,La Granja
+79,18,5,La Granja
+80,18,6,La Granja
