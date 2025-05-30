@@ -17,7 +17,7 @@ data['rho_c'] = pd.read_csv(os_join('comisarias.csv'), usecols=['presupuesto_dia
 data['theta_{q,h}'] = pd.read_csv(os_join('crimenes_por_hora.csv'), header=None)
 data['a1'] = pd.read_csv(os_join('ponderadores_fo.csv'), usecols=['a1']).squeeze()
 data['a2'] = pd.read_csv(os_join('ponderadores_fo.csv'), usecols=['a2']).squeeze()
-Big_M = 1000000  
+Big_M = 10000000000  
 
 
 c_vecinos = pd.read_csv(os_join('cuadrantes_vecinos.csv'), header=None)
@@ -105,10 +105,16 @@ R5 = m.addConstrs(
 
 # R7: Se visitan todos los cuadrantes al menos una hora al día
 R7 = m.addConstrs(
+  (quicksum(w[c, t, q, h] for c in C for t in T for h in H) >= 1
+    for q in Q),
+  name="R7"
+)
+""" R7 original
+R7 = m.addConstrs(
     (quicksum(w[c, t, q, h] for h in H for t in T) >= 1 for c in C for q in Q),
     name="R7"
 )
-
+"""
 """
 # R8 No se puede patrullar si no se sale de la comisaría
 R8 = m.addConstr(
@@ -129,7 +135,7 @@ R10 = m.addConstrs(
     (w[c, t, q, h] * data['theta_{q,h}'][h][q] == z[h, q]  for c in C for t in T for q in Q for h in H),
     name="R9"
 )
-
+"""
 # R11: Movimiento entre cuadrantes vecinos
 for c in C:
     for t in T:
@@ -140,6 +146,7 @@ for c in C:
                     m.addConstr(
                         w[c, t, q, h] + quicksum(w[c, t, q_p, h+1] for q_p in no_vecinos) <= 1,
                         name="R11")
+"""
 # Definimos la función objetivo
 m.setObjective(
     quicksum(data['a1'] * y[q]  + 
