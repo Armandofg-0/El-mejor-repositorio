@@ -132,7 +132,7 @@ R9 = m.addConstrs(
 
 # R10: Activación de Z si y solo si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora
 R10 = m.addConstrs(
-    (w[c, t, q, h] * data['theta_{q,h}'][h][q] == z[h, q]  for c in C for t in T for q in Q for h in H),
+    (w[c, t, q, h] * data['theta_{q,h}'][h][q] == z[q, h]  for c in C for t in T for q in Q for h in H),
     name="R9"
 )
 """
