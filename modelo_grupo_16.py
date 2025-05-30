@@ -74,11 +74,15 @@ R2 = m.addConstrs(
 )
 
 # R3: Límite de horas de patrullas por comisaría
-R3 = m.addConstr(
-    (data['pi_c'] <= quicksum(w[c, t, q, h] for q in Q for h in H) <= data['Pi_c'][t] for c in C for t in T),
-    name="R3"
+R3_superior = m.addConstrs(
+    (quicksum(w[c, t, q, h] for q in Q for h in H) <= data['Pi_c'][t] for c in C for t in T),
+    name="R3_superior"
 )
 
+R3_inferior = m.addConstrs(
+    (data['pi_c'][t] <= quicksum(w[c, t, q, h] for q in Q for h in H) for c in C for t in T),
+    name="R3_inferior"
+)
 # R4: Restricción de presupuesto    
 R4 = m.addConstrs(
     (
@@ -91,13 +95,13 @@ R4 = m.addConstrs(
     ),
     name="R4"
 )
-'''
+
 # R5: Una patrulla solo puede estar en un cuadrante a la vez
 R5 = m.addConstr(
     (quicksum(w[c, t, q, h] for q in Q) <= 1 for c in C for t in T for h in H),
     name="R5"
 )
-
+'''
 # R6: Una patrulla tiene que estar asignada a una sola comisaria
 R6 = m.addConstr(
     (quicksum(w[c, t, q, h] for c in C) == 1 for t in T for h in H for q in Q),
@@ -140,7 +144,7 @@ m.setObjective(
     quicksum(data['a2'] * z[q, h] for h in H) for q in Q),
     GRB.MAXIMIZE
 )
-
+'''
 # Resolvemos el modelo
 m.optimize()
 
@@ -158,4 +162,3 @@ if m.status == GRB.OPTIMAL:
         for h in H:
             if z[q, h].X > 0.5:  # Si hay una patrulla en el cuadrante q a la hora h
                 print(f"Cuadrante {q}, Hora {h}: Patrulla presente")
-'''
