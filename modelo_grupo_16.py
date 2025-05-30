@@ -30,9 +30,9 @@ data['B'] = pd.read_csv(os_join('comisarias.csv')).squeeze().values
 data['f'] = pd.read_csv(os_join('patrullas.csv')).squeeze().values
 
 # Creamos conjuntos
-Q = range(1, len(data["r"])) # Conjunto de cuadrantes
+Q = range(1, len(data["r"]) + 1) # Conjunto de cuadrantes
 C = range(1, len(data["B"])) # Conjunto de comisarías
-T = range(1 ,len(data['f'])) # Conjunto de patrullas
+T = range(1 ,len(data['f']) + 1) # Conjunto de patrullas
 H = range(1, 24) # Conjunto de horas
 J = comisarias.groupby('id_comisaría_asociada')['id_cuadrante'].apply(list).to_dict() # Subconjunto de cuadrantes asignados a cada comisaría
 O = patrullas.groupby('id_comisaría_asignada')['id_patrulla'].apply(list).to_dict() # Subconjunto de cuadrantes asignados a cada comisaría
@@ -53,11 +53,6 @@ for i, fila in demanda_hora.iterrows():
         demanda.append(j) 
     delta[i+1] = demanda
 
-data['f'] = pd.read_csv(os_join('patrullas.csv')).squeeze().values
-data['n'] = pd.read_csv(os_join('cuadrantes_vecinos.csv')).squeeze().values
-data['F'] = pd.read_csv(os_join('cuadrantes_vecinos.csv'), header=None).squeeze().values
-data['g'] = pd.read_csv(os_join('costos.csv')).squeeze().values
-
 # Definimos el modelo
 m = Model("Modelo de Optimización de Patrullas")
 
@@ -70,15 +65,6 @@ w = m.addVars(((c, t, q, h) for c in C for t in O[c] for q in J[c] for h in H), 
 
 
 # Definimos las restricciones
-
-'''
-# R1: Una patrulla solo puede visitar los cuadrantes que le corresponden
-R1 = m.addConstrs(
-    (w[c, t, q, h] == 0
-     for c in C for t in T for q in Q for h in H if q not in J[c]),
-    name="R1"
-)
-'''
 
 # R2: Stock máximo de patrullas por comisaría
 R2 = m.addConstrs(
@@ -127,14 +113,6 @@ R7 = m.addConstrs(
 )
 
 
-'''
-R7 original
-R7 = m.addConstrs(
-    (quicksum(w[c, t, q, h] for h in H for t in T) >= 1 for c in C for q in Q),
-    name="R7"
-)
-'''
-
 # R8 No se puede patrullar si no se sale de la comisaría
 R8 = m.addConstrs(
     (quicksum(w[c, t, q, h] for q in J[c]) <= p[c, t] * Big_M for c in C for t in O[c] for h in H),
@@ -178,24 +156,54 @@ m.optimize()
 
 end_time = time.time()
 elapsed_time = round((end_time - start_time), 2)
-print(f'elapsed time: {elapsed_time} seconds')
 
 # Imprimimos los resultados
 if m.status == GRB.OPTIMAL:
-    print("Solución óptima encontrada:")
+    print('-' * 80)
+    print(f'\nVariable w_[c, t, q, h]:')
+    print(f'Recorrido de cada patrulla a lo largo de las horas del día:\n')
+    for c, t, q, h in w.keys(): # w.keys() devuelve todas las tuplas de índices para las que 'w' existe
+        if w[c, t, q, h].X == 1: # Si la variable binaria es 1 (o muy cerca de 1)
+            print(f" Patrulla {t} de la comisaría {c} está en el cuadrante {q} a la hora {h}")
+
+    print()
+    print('-' * 80)
+    print(f'\nTotal de horas recorridas de cada patrulla t:\n')
     for c in C:
         for t in O[c]:
             horas_activas = sum(w[c, t, q, h].X
                             for q in J[c] # Suma solo sobre los cuadrantes asociados a la comisaría 'c'
                             for h in H
                             if (c, t, q, h) in w) # Asegurarse de que la variable existe  
-            print(f" Patrulla {t} de la comisaría {c}: Horas activas = {horas_activas:.0f}, horas max: {data['Pi_c'][t]}")
+            print(f" Patrulla {t} de la comisaría {c}: Horas activas = {horas_activas:.0f}, horas máx: {data['Pi_c'][t]}")
 
-    for c, t, q, h in w.keys(): # w.keys() devuelve todas las tuplas de índices para las que 'w' existe
-        if w[c, t, q, h].X == 1: # Si la variable binaria es 1 (o muy cerca de 1)
-            print(f" Patrulla {t} de la comisaría {c} está en {q} a la hora {h}")
+    demanda_cumplida = 0
+    for q, h in y.keys():
+        if y[q, h].X == 1:
+            demanda_cumplida += 1
 
+    print()
+    print('-' * 80)
+    print(f'\nVariable y_[q, h]:\n')
+    print(f'Total de casos posibles de cumplimiento de demanda = {80 * 24}')
+    print(f'Total de veces que se cumplió la demanda = {demanda_cumplida}\n')
+    print('-' * 80)
+
+    patrulla_presente = 0
+    patrulla_no_presente = 0
     for q in Q:
-       for h in H:
-        if y[q, h].X != 0:
-            print(f'cuadrante {q} hora {h}, demanda cumplida: {y[q, h].X}')
+        for h in H:
+            if data['theta_{q,h}'][h][q - 1] == 1:
+                if z[q, h].X == 1:
+                    patrulla_presente += 1
+                else:
+                    patrulla_no_presente += 1
+
+    print(f'\nVariable z_[q, h]:')
+    print(f'\nTotal de crimenes = {patrulla_presente + patrulla_no_presente}')    
+    print(f'Total de crímenes en los que hubo alguna patrulla en el mismo cuadrante = {patrulla_presente}\n')
+
+    print('-' * 80)
+    print(f"\nSolución óptima encontrada en {elapsed_time}s: {int(m.ObjVal)} unidades de felicidad\n")
+    print('-' * 80)
+
