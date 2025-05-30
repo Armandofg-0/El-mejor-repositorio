@@ -96,46 +96,44 @@ R4 = m.addConstrs(
     name="R4"
 )
 
+
 # R5: Una patrulla solo puede estar en un cuadrante a la vez
-R5 = m.addConstr(
+R5 = m.addConstrs(
     (quicksum(w[c, t, q, h] for q in Q) <= 1 for c in C for t in T for h in H),
     name="R5"
 )
-'''
-# R6: Una patrulla tiene que estar asignada a una sola comisaria
-R6 = m.addConstr(
-    (quicksum(w[c, t, q, h] for c in C) == 1 for t in T for h in H for q in Q),
-    name="R6"
-)
 
 # R7: Se visitan todos los cuadrantes al menos una hora al día
-R7 = m.addConstr(
+R7 = m.addConstrs(
     (quicksum(w[c, t, q, h] for h in H for t in T) >= 1 for c in C for q in Q),
     name="R7"
 )
 
+"""
 # R8 No se puede patrullar si no se sale de la comisaría
 R8 = m.addConstr(
     (quicksum(w[c, t, q, h] for q in Q) <= p[c, t] * Big_M for c in C for t in T for h in H),
     name="R8"
 )
+"""
 
 # R9: Activación de Y si y solo si se cumple la demanda
-R9 = m.addConstr(
-    (quicksum(w[c, t, q, h] for h in H for t in T) - data['delta_q'] <= Big_M * y[q] for q in Q for c in C),
-    name="R10"
+R9 = m.addConstrs(
+    (quicksum(w[c, t, q, h] for h in H for t in T) - data['delta_q'][q] <= Big_M * y[q] for q in Q for c in C),
+    name="R9"
 )
 
+'''
 # R10: Activación de Z si y solo si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora
 R10 = m.addConstr(
     (w[c, t, q, h] * data['theta_{q,h}'] == z[q, h]  for c in C for t in T for q in Q for h in H),
-    name="R11"
+    name="R9"
 )
 
 # R11: Movimiento entre cuadrantes vecinos
 R11 = m.addConstr(
     (quicksum(w[c, t, q, h] for q in V[q2]) - quicksum(w[c, t, q2, h] for q2 in V[q]) == 0 for c in C for t in T for q in Q for q2 in Q for h in H),
-    name="R13"
+    name="R11"
 )
 
 # Definimos la función objetivo
