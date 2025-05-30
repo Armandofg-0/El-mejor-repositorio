@@ -1,9 +1,12 @@
 import pandas as pd
 import os
+import time
 from gurobipy import Model, GRB, quicksum
 
 def os_join(path):
     return os.path.join("data", path)
+
+start_time = time.time()
 
 # Definimos los parámetros
 data = {}
@@ -31,7 +34,7 @@ Q = range(1, len(data["r"])) # Conjunto de cuadrantes
 C = range(1, len(data["B"])) # Conjunto de comisarías
 T = range(1 ,len(data["f"])) # Conjunto de patrullas
 H = range(1,24) # Conjunto de horas
-J = comisarias.groupby('id_comisaría_asociada')['id_cuadrante'].apply(list).to_dict()
+J = comisarias.groupby('id_comisaría_asociada')['id_cuadrante'].apply(list).to_dict() # Subconjunto de cuadrantes asignados a cada comisaría
 V = {}
 
 for i, fila in c_vecinos.iterrows():
@@ -55,17 +58,19 @@ m = Model("Modelo de Optimización de Patrullas")
 y = m.addVars(Q, vtype=GRB.BINARY, name="y")  # 1 si se cumple la demanda en el cuadrante *q*, 0 e.o.c. 
 z = m.addVars(Q, H, vtype=GRB.BINARY, name="z")  # 1 si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora, 0 e.o.c.
 p = m.addVars(C, T, vtype=GRB.BINARY, name="p")  # 1 si la patrulla *t* sale de la comisaría *c*, 0 e.o.c.
-w = m.addVars(C, T, Q, H, vtype=GRB.BINARY, name="w")  # 1 si la patrulla *t¨* de la comisaría *c* está en el cuadrante *q* a la hora *h*, 0 e.o.c.
+w = m.addVars(((c, t, q, h) for c in C for t in T for q in J[c] for h in H), vtype=GRB.BINARY, name="w")  # 1 si la patrulla *t¨* de la comisaría *c* está en el cuadrante *q* a la hora *h*, 0 e.o.c.
 
 
 # Definimos las restricciones
 
+'''
 # R1: Una patrulla solo puede visitar los cuadrantes que le corresponden
 R1 = m.addConstrs(
     (w[c, t, q, h] == 0
      for c in C for t in T for q in Q for h in H if q not in J[c]),
     name="R1"
 )
+'''
 
 # R2: Stock máximo de patrullas por comisaría
 R2 = m.addConstrs(
@@ -75,20 +80,22 @@ R2 = m.addConstrs(
 
 # R3: Límite de horas de patrullas por comisaría
 R3_superior = m.addConstrs(
-    (quicksum(w[c, t, q, h] for q in Q for h in H) <= data['Pi_c'][t] for c in C for t in T),
+    (quicksum(w[c, t, q, h] for q in J[c] for h in H) <= data['Pi_c'][t] for c in C for t in T),
     name="R3_superior"
 )
-
+# Se asume que las horas minimas de patrullaje para cada patrulla son 0
+''' 
 R3_inferior = m.addConstrs(
-    (data['pi_c'][t] <= quicksum(w[c, t, q, h] for q in Q for h in H) for c in C for t in T),
+    (quicksum(w[c, t, q, h] for q in J[c] for h in H) >= data['pi_c'][t] for c in C for t in T),
     name="R3_inferior"
 )
+'''
 # R4: Restricción de presupuesto    
 R4 = m.addConstrs(
     (
         quicksum(
             data['K'] * p[c, t] + 
-            quicksum(w[c, t, q, h] * data['k'] for h in H for q in Q)
+            quicksum(w[c, t, q, h] * data['k'] for h in H for q in J[c])
             for t in T
         ) <= data['rho_c'][c]
         for c in C
@@ -99,54 +106,55 @@ R4 = m.addConstrs(
 
 # R5: Una patrulla solo puede estar en un cuadrante a la vez
 R5 = m.addConstrs(
-    (quicksum(w[c, t, q, h] for q in Q) <= 1 for c in C for t in T for h in H),
+    (quicksum(w[c, t, q, h] for q in J[c]) <= 1 for c in C for t in T for h in H),
     name="R5"
 )
 
 # R7: Se visitan todos los cuadrantes al menos una hora al día
 R7 = m.addConstrs(
-  (quicksum(w[c, t, q, h] for c in C for t in T for h in H) >= 1
-    for q in Q),
+  (quicksum(w.get((c, t, q, h), 0) for t in T for h in H) >= 1
+    for c in C for q in J[c]),
   name="R7"
 )
-""" R7 original
+'''
+R7 original
 R7 = m.addConstrs(
     (quicksum(w[c, t, q, h] for h in H for t in T) >= 1 for c in C for q in Q),
     name="R7"
 )
-"""
-"""
+'''
+
 # R8 No se puede patrullar si no se sale de la comisaría
-R8 = m.addConstr(
-    (quicksum(w[c, t, q, h] for q in Q) <= p[c, t] * Big_M for c in C for t in T for h in H),
+R8 = m.addConstrs(
+    (quicksum(w[c, t, q, h] for q in J[c]) <= p[c, t] * Big_M for c in C for t in T for h in H),
     name="R8"
 )
-"""
+
 
 # R9: Activación de Y si y solo si se cumple la demanda
 R9 = m.addConstrs(
-    (quicksum(w[c, t, q, h] for h in H for t in T) - data['delta_q'][q] <= Big_M * y[q] for q in Q for c in C),
+    (quicksum(w[c, t, q, h] for h in H for t in T) - data['delta_q'][q] <= Big_M * y[q] for c in C for q in J[c]),
     name="R9"
 )
 
 
 # R10: Activación de Z si y solo si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora
 R10 = m.addConstrs(
-    (w[c, t, q, h] * data['theta_{q,h}'][h][q] == z[q, h]  for c in C for t in T for q in Q for h in H),
+    (w[c, t, q, h] * data['theta_{q,h}'][h][q] == z[q, h]  for c in C for t in T for q in J[c] for h in H),
     name="R9"
 )
-"""
+
 # R11: Movimiento entre cuadrantes vecinos
 for c in C:
     for t in T:
-        for q in Q:
+        for q in J[c]:
             for h in H[:-1]: 
-                no_vecinos = [q_p for q_p in Q if q_p not in V[q] and q_p != q] 
+                no_vecinos = [q_p for q_p in J[c] if q_p not in V[q] and q_p != q] 
                 if no_vecinos:
                     m.addConstr(
                         w[c, t, q, h] + quicksum(w[c, t, q_p, h+1] for q_p in no_vecinos) <= 1,
                         name="R11")
-"""
+
 # Definimos la función objetivo
 m.setObjective(
     quicksum(data['a1'] * y[q]  + 
@@ -155,19 +163,14 @@ m.setObjective(
 )
 
 # Resolvemos el modelo
+
 m.optimize()
+
+end_time = time.time()
+elapsed_time = round((end_time - start_time), 2)
+print(f'elapsed time: {elapsed_time} seconds')
 
 # Imprimimos los resultados
 if m.status == GRB.OPTIMAL:
     print("Solución óptima encontrada:")
-    for q in Q:
-        if y[q].X > 0.5:  # Si se cumple la demanda en el cuadrante q
-            print(f"Cuadrante {q}: Demanda cumplida")
-    for c in C:
-        for t in T:
-            if p[c, t].X > 0.5:  # Si la patrulla t sale de la comisaría c
-                print(f"Comisaría {c}, Patrulla {t}: Sale de la comisaría")
-    for q in Q:
-        for h in H:
-            if z[q, h].X > 0.5:  # Si hay una patrulla en el cuadrante q a la hora h
-                print(f"Cuadrante {q}, Hora {h}: Patrulla presente")
+    
