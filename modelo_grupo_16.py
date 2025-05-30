@@ -10,7 +10,6 @@ start_time = time.time()
 
 # Definimos los parámetros
 data = {}
-data["delta_q"] = pd.read_csv(os_join('cuadrantes.csv'), usecols=['demanda_por_dia']).squeeze().values # Matriz que contiene: la demanda de cada cuadrante por horas (posible cambio a días)
 data['upsilon_c'] = pd.read_csv(os_join('comisarias.csv'), usecols=['total_patrullas_por_comisaria']).squeeze().values
 data['pi_c'] = pd.read_csv(os_join('patrullas.csv'), usecols=['horas_min']).squeeze().values
 data['Pi_c'] = pd.read_csv(os_join('patrullas.csv'), usecols=['horas_max']).squeeze().values
@@ -25,6 +24,7 @@ Big_M = 10000000000
 
 c_vecinos = pd.read_csv(os_join('cuadrantes_vecinos.csv'), header=None)
 comisarias = pd.read_csv(os_join('cuadrantes.csv'))
+patrullas = pd.read_csv(os_join('patrullas.csv'))
 data['r'] = pd.read_csv(os_join('cuadrantes.csv')).squeeze().values
 data['B'] = pd.read_csv(os_join('comisarias.csv')).squeeze().values           
 data['f'] = pd.read_csv(os_join('patrullas.csv')).squeeze().values
@@ -32,9 +32,10 @@ data['f'] = pd.read_csv(os_join('patrullas.csv')).squeeze().values
 # Creamos conjuntos
 Q = range(1, len(data["r"])) # Conjunto de cuadrantes
 C = range(1, len(data["B"])) # Conjunto de comisarías
-T = range(1 ,len(data["f"])) # Conjunto de patrullas
-H = range(1,24) # Conjunto de horas
+T = range(1 ,len(data['f'])) # Conjunto de patrullas
+H = range(1, 24) # Conjunto de horas
 J = comisarias.groupby('id_comisaría_asociada')['id_cuadrante'].apply(list).to_dict() # Subconjunto de cuadrantes asignados a cada comisaría
+O = patrullas.groupby('id_comisaría_asignada')['id_patrulla'].apply(list).to_dict() # Subconjunto de cuadrantes asignados a cada comisaría
 V = {}
 
 for i, fila in c_vecinos.iterrows():
@@ -44,21 +45,28 @@ for i, fila in c_vecinos.iterrows():
             vecinos.append(int(num))  # o int(val) si el número que aparece es el id del vecino
     V[i+1] = vecinos
 
+demanda_hora = pd.read_csv(os_join('demanda_cuadrante_hora.csv'), header=None)
+delta = {}
+for i, fila in demanda_hora.iterrows():
+    demanda = []
+    for j in fila:
+        demanda.append(j) 
+    delta[i+1] = demanda
+
 data['f'] = pd.read_csv(os_join('patrullas.csv')).squeeze().values
 data['n'] = pd.read_csv(os_join('cuadrantes_vecinos.csv')).squeeze().values
 data['F'] = pd.read_csv(os_join('cuadrantes_vecinos.csv'), header=None).squeeze().values
 data['g'] = pd.read_csv(os_join('costos.csv')).squeeze().values
-
 
 # Definimos el modelo
 m = Model("Modelo de Optimización de Patrullas")
 
 
 # Definimos las variables de decisión       
-y = m.addVars(Q, vtype=GRB.BINARY, name="y")  # 1 si se cumple la demanda en el cuadrante *q*, 0 e.o.c. 
+y = m.addVars(Q, H, vtype=GRB.BINARY, name="y")  # 1 si se cumple la demanda en el cuadrante *q*, 0 e.o.c. 
 z = m.addVars(Q, H, vtype=GRB.BINARY, name="z")  # 1 si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora, 0 e.o.c.
 p = m.addVars(C, T, vtype=GRB.BINARY, name="p")  # 1 si la patrulla *t* sale de la comisaría *c*, 0 e.o.c.
-w = m.addVars(((c, t, q, h) for c in C for t in T for q in J[c] for h in H), vtype=GRB.BINARY, name="w")  # 1 si la patrulla *t¨* de la comisaría *c* está en el cuadrante *q* a la hora *h*, 0 e.o.c.
+w = m.addVars(((c, t, q, h) for c in C for t in O[c] for q in J[c] for h in H), vtype=GRB.BINARY, name="w")  # 1 si la patrulla *t¨* de la comisaría *c* está en el cuadrante *q* a la hora *h*, 0 e.o.c.
 
 
 # Definimos las restricciones
@@ -74,13 +82,13 @@ R1 = m.addConstrs(
 
 # R2: Stock máximo de patrullas por comisaría
 R2 = m.addConstrs(
-    (quicksum(p[c, t] for t in T) <= data['upsilon_c'][c] for c in C),
+    (quicksum(p[c, t] for t in O[c]) <= data['upsilon_c'][c] for c in C),
     name="R2"
 )
 
 # R3: Límite de horas de patrullas por comisaría
 R3_superior = m.addConstrs(
-    (quicksum(w[c, t, q, h] for q in J[c] for h in H) <= data['Pi_c'][t] for c in C for t in T),
+    (quicksum(w[c, t, q, h] for q in J[c] for h in H) <= data['Pi_c'][t] for c in C for t in O[c]),
     name="R3_superior"
 )
 # Se asume que las horas minimas de patrullaje para cada patrulla son 0
@@ -96,7 +104,7 @@ R4 = m.addConstrs(
         quicksum(
             data['K'] * p[c, t] + 
             quicksum(w[c, t, q, h] * data['k'] for h in H for q in J[c])
-            for t in T
+            for t in O[c]
         ) <= data['rho_c'][c]
         for c in C
     ),
@@ -106,16 +114,19 @@ R4 = m.addConstrs(
 
 # R5: Una patrulla solo puede estar en un cuadrante a la vez
 R5 = m.addConstrs(
-    (quicksum(w[c, t, q, h] for q in J[c]) <= 1 for c in C for t in T for h in H),
+    (quicksum(w[c, t, q, h] for q in J[c]) <= 1 for c in C for t in O[c] for h in H),
     name="R5"
 )
 
+
 # R7: Se visitan todos los cuadrantes al menos una hora al día
 R7 = m.addConstrs(
-  (quicksum(w.get((c, t, q, h), 0) for t in T for h in H) >= 1
+  (quicksum(w.get((c, t, q, h), 0) for t in O[c] for h in H) >= 1
     for c in C for q in J[c]),
   name="R7"
 )
+
+
 '''
 R7 original
 R7 = m.addConstrs(
@@ -126,27 +137,27 @@ R7 = m.addConstrs(
 
 # R8 No se puede patrullar si no se sale de la comisaría
 R8 = m.addConstrs(
-    (quicksum(w[c, t, q, h] for q in J[c]) <= p[c, t] * Big_M for c in C for t in T for h in H),
+    (quicksum(w[c, t, q, h] for q in J[c]) <= p[c, t] * Big_M for c in C for t in O[c] for h in H),
     name="R8"
 )
 
 
 # R9: Activación de Y si y solo si se cumple la demanda
 R9 = m.addConstrs(
-    (quicksum(w[c, t, q, h] for h in H for t in T) - data['delta_q'][q] <= Big_M * y[q] for c in C for q in J[c]),
+    (quicksum(w[c, t, q, h] for t in O[c]) >= y[q, h] * delta[q][h] for c in C for q in J[c] for h in H),
     name="R9"
 )
 
 
 # R10: Activación de Z si y solo si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora
 R10 = m.addConstrs(
-    (w[c, t, q, h] * data['theta_{q,h}'][h][q] == z[q, h]  for c in C for t in T for q in J[c] for h in H),
+    (w[c, t, q, h] * data['theta_{q,h}'][h][q] == z[q, h]  for c in C for t in O[c] for q in J[c] for h in H),
     name="R9"
 )
 
 # R11: Movimiento entre cuadrantes vecinos
 for c in C:
-    for t in T:
+    for t in O[c]:
         for q in J[c]:
             for h in H[:-1]: 
                 no_vecinos = [q_p for q_p in J[c] if q_p not in V[q] and q_p != q] 
@@ -157,8 +168,7 @@ for c in C:
 
 # Definimos la función objetivo
 m.setObjective(
-    quicksum(data['a1'] * y[q]  + 
-    quicksum(data['a2'] * z[q, h] for h in H) for q in Q),
+    quicksum(data['a1'] * y[q, h] + data['a2'] * z[q, h] for h in H for q in Q),
     GRB.MAXIMIZE
 )
 
@@ -173,4 +183,19 @@ print(f'elapsed time: {elapsed_time} seconds')
 # Imprimimos los resultados
 if m.status == GRB.OPTIMAL:
     print("Solución óptima encontrada:")
-    
+    for c in C:
+        for t in O[c]:
+            horas_activas = sum(w[c, t, q, h].X
+                            for q in J[c] # Suma solo sobre los cuadrantes asociados a la comisaría 'c'
+                            for h in H
+                            if (c, t, q, h) in w) # Asegurarse de que la variable existe  
+            print(f" Patrulla {t} de la comisaría {c}: Horas activas = {horas_activas:.0f}, horas max: {data['Pi_c'][t]}")
+
+    for c, t, q, h in w.keys(): # w.keys() devuelve todas las tuplas de índices para las que 'w' existe
+        if w[c, t, q, h].X == 1: # Si la variable binaria es 1 (o muy cerca de 1)
+            print(f" Patrulla {t} de la comisaría {c} está en {q} a la hora {h}")
+
+    for q in Q:
+       for h in H:
+        if y[q, h].X != 0:
+            print(f'cuadrante {q} hora {h}, demanda cumplida: {y[q, h].X}')
