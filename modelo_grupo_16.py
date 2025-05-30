@@ -123,26 +123,30 @@ R9 = m.addConstrs(
     name="R9"
 )
 
-'''
+
 # R10: Activación de Z si y solo si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora
-R10 = m.addConstr(
-    (w[c, t, q, h] * data['theta_{q,h}'] == z[q, h]  for c in C for t in T for q in Q for h in H),
+R10 = m.addConstrs(
+    (w[c, t, q, h] * data['theta_{q,h}'][h][q] == z[h, q]  for c in C for t in T for q in Q for h in H),
     name="R9"
 )
 
 # R11: Movimiento entre cuadrantes vecinos
-R11 = m.addConstr(
-    (quicksum(w[c, t, q, h] for q in V[q2]) - quicksum(w[c, t, q2, h] for q2 in V[q]) == 0 for c in C for t in T for q in Q for q2 in Q for h in H),
-    name="R11"
-)
-
+for c in C:
+    for t in T:
+        for q in Q:
+            for h in H[:-1]: 
+                no_vecinos = [q_p for q_p in Q if q_p not in V[q] and q_p != q] 
+                if no_vecinos:
+                    m.addConstr(
+                        w[c, t, q, h] + quicksum(w[c, t, q_p, h+1] for q_p in no_vecinos) <= 1,
+                        name="R11")
 # Definimos la función objetivo
 m.setObjective(
     quicksum(data['a1'] * y[q]  + 
     quicksum(data['a2'] * z[q, h] for h in H) for q in Q),
     GRB.MAXIMIZE
 )
-'''
+
 # Resolvemos el modelo
 m.optimize()
 
