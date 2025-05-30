@@ -27,9 +27,9 @@ data['B'] = pd.read_csv(os_join('comisarias.csv')).squeeze().values
 data['f'] = pd.read_csv(os_join('patrullas.csv')).squeeze().values
 
 # Creamos conjuntos
-Q = range(len(data["r"])) # Conjunto de cuadrantes
-C = range(len(data["B"])) # Conjunto de comisarías
-T = range(len(data["f"])) # Conjunto de patrullas
+Q = range(1, len(data["r"])) # Conjunto de cuadrantes
+C = range(1, len(data["B"])) # Conjunto de comisarías
+T = range(1 ,len(data["f"])) # Conjunto de patrullas
 H = range(1,24) # Conjunto de horas
 J = comisarias.groupby('id_comisaría_asociada')['id_cuadrante'].apply(list).to_dict()
 V = {}
@@ -68,25 +68,23 @@ R1 = m.addConstrs(
 )
 
 # R2: Stock máximo de patrullas por comisaría
-m.addConstrs(
+R2 = m.addConstrs(
     (quicksum(p[c, t] for t in T) <= data['upsilon_c'][c] for c in C),
     name="R2"
 )
-
-
-
+"""
 # R3: Límite de horas de patrullas por comisaría
 R3 = m.addConstr(
     (data['pi_c'] <= quicksum(w[c, t, q, h] for q in Q for h in H) <= data['Pi_c'][t] for c in C for t in T),
     name="R3"
-)
-'''
+)"""
+
 # R4: Restricción de presupuesto    
 R4 = m.addConstr(
     ((quicksum(data['K'] * p[c, t] + quicksum(w[c, t, q, h] * data['k'] for h in H for q in Q) for t in T) <= data['rho_c']) for c in C),
     name="R4"
 )
-
+'''
 # R5: Una patrulla solo puede estar en un cuadrante a la vez
 R5 = m.addConstr(
     (quicksum(w[c, t, q, h] for q in Q) <= 1 for c in C for t in T for h in H),
@@ -111,32 +109,20 @@ R8 = m.addConstr(
     name="R8"
 )
 
-# R9: Solo se puede patrullar si se sale de la comisaría
+# R9: Activación de Y si y solo si se cumple la demanda
 R9 = m.addConstr(
-    (w[c, t, q, h] <= p[c, t] for c in C for t in T for q in Q for h in H),
-    name="R9"
-)
-
-# R10: Activación de Y si y solo si se cumple la demanda
-R10 = m.addConstr(
     (quicksum(w[c, t, q, h] for h in H for t in T) - data['delta_q'] <= Big_M * y[q] for q in Q for c in C),
     name="R10"
 )
 
-# R11: Activación de Z si y solo si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora
-R11 = m.addConstr(
+# R10: Activación de Z si y solo si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora
+R10 = m.addConstr(
     (w[c, t, q, h] * data['theta_{q,h}'] == z[q, h]  for c in C for t in T for q in Q for h in H),
     name="R11"
 )
 
-# R12: Una patrulla solo puede estar presente en un crimen, si es que existe un crimen
-R12 = m.addConstr(
-    (z[q, h] <= data['theta_{q,h}'] for q in Q for h in H),
-    name="R12"
-)
-
-# R13: Movimiento entre cuadrantes vecinos
-R13 = m.addConstr(
+# R11: Movimiento entre cuadrantes vecinos
+R11 = m.addConstr(
     (quicksum(w[c, t, q, h] for q in V[q2]) - quicksum(w[c, t, q2, h] for q2 in V[q]) == 0 for c in C for t in T for q in Q for q2 in Q for h in H),
     name="R13"
 )
