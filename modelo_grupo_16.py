@@ -72,16 +72,23 @@ R2 = m.addConstrs(
     (quicksum(p[c, t] for t in T) <= data['upsilon_c'][c] for c in C),
     name="R2"
 )
-"""
+
 # R3: Límite de horas de patrullas por comisaría
 R3 = m.addConstr(
     (data['pi_c'] <= quicksum(w[c, t, q, h] for q in Q for h in H) <= data['Pi_c'][t] for c in C for t in T),
     name="R3"
-)"""
+)
 
 # R4: Restricción de presupuesto    
-R4 = m.addConstr(
-    ((quicksum(data['K'] * p[c, t] + quicksum(w[c, t, q, h] * data['k'] for h in H for q in Q) for t in T) <= data['rho_c']) for c in C),
+R4 = m.addConstrs(
+    (
+        quicksum(
+            data['K'] * p[c, t] + 
+            quicksum(w[c, t, q, h] * data['k'] for h in H for q in Q)
+            for t in T
+        ) <= data['rho_c'][c]
+        for c in C
+    ),
     name="R4"
 )
 '''
