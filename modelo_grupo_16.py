@@ -1,12 +1,9 @@
 import pandas as pd
 import os
-import time
 from gurobipy import Model, GRB, quicksum
 
 def os_join(path):
     return os.path.join("data", path)
-
-start_time = time.time()
 
 # Definimos los parámetros
 data = {}
@@ -66,74 +63,60 @@ w = m.addVars(((c, t, q, h) for c in C for t in O[c] for q in J[c] for h in H), 
 
 # Definimos las restricciones
 
-# R2: Stock máximo de patrullas por comisaría
-R2 = m.addConstrs(
+# R1: Stock máximo de patrullas por comisaría
+R1 = m.addConstrs(
     (quicksum(p[c, t] for t in O[c]) <= data['upsilon_c'][c] for c in C),
+    name="R1"
+)
+
+# R2: Límite de horas de patrullas por comisaría
+R2 = m.addConstrs(
+    (quicksum(w[c, t, q, h] for q in J[c] for h in H) <= data['Pi_c'][t] for c in C for t in O[c]),
     name="R2"
 )
 
-# R3: Límite de horas de patrullas por comisaría
-R3_superior = m.addConstrs(
-    (quicksum(w[c, t, q, h] for q in J[c] for h in H) <= data['Pi_c'][t] for c in C for t in O[c]),
-    name="R3_superior"
-)
-# Se asume que las horas minimas de patrullaje para cada patrulla son 0
-''' 
-R3_inferior = m.addConstrs(
-    (quicksum(w[c, t, q, h] for q in J[c] for h in H) >= data['pi_c'][t] for c in C for t in T),
-    name="R3_inferior"
-)
-'''
-# R4: Restricción de presupuesto    
-R4 = m.addConstrs(
-    (
-        quicksum(
-            data['K'] * p[c, t] + 
-            quicksum(w[c, t, q, h] * data['k'] for h in H for q in J[c])
-            for t in O[c]
-        ) <= data['rho_c'][c]
-        for c in C
+# R3: Restricción de presupuesto    
+R3 = m.addConstrs(
+    (quicksum(data['K'] * p[c, t] + quicksum(w[c, t, q, h] * data['k'] 
+    for h in H for q in J[c]) for t in O[c]) <= data['rho_c'][c]for c in C
     ),
-    name="R4"
+    name="R3"
 )
 
 
-# R5: Una patrulla solo puede estar en un cuadrante a la vez
-R5 = m.addConstrs(
+# R4: Una patrulla solo puede estar en un cuadrante a la vez
+R4 = m.addConstrs(
     (quicksum(w[c, t, q, h] for q in J[c]) <= 1 for c in C for t in O[c] for h in H),
     name="R5"
 )
 
 
-# R7: Se visitan todos los cuadrantes al menos una hora al día
-R7 = m.addConstrs(
+# R5: Se visitan todos los cuadrantes al menos una hora al día
+R5 = m.addConstrs(
   (quicksum(w.get((c, t, q, h), 0) for t in O[c] for h in H) >= 1
     for c in C for q in J[c]),
-  name="R7"
+  name="R5"
 )
 
-
-# R8 No se puede patrullar si no se sale de la comisaría
-R8 = m.addConstrs(
+# R6 No se puede patrullar si no se sale de la comisaría
+R6 = m.addConstrs(
     (quicksum(w[c, t, q, h] for q in J[c]) <= p[c, t] * Big_M for c in C for t in O[c] for h in H),
+    name="R6"
+)
+
+# R7: Activación de Y si y solo si se cumple la demanda
+R7 = m.addConstrs(
+    (quicksum(w[c, t, q, h] for t in O[c]) >= y[q, h] * delta[q][h] for c in C for q in J[c] for h in H),
+    name="R7"
+)
+
+# R8: Activación de Z si y solo si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora
+R8 = m.addConstrs(
+    (w[c, t, q, h] * data['theta_{q,h}'][h][q] == z[q, h]  for c in C for t in O[c] for q in J[c] for h in H),
     name="R8"
 )
 
-
-# R9: Activación de Y si y solo si se cumple la demanda
-R9 = m.addConstrs(
-    (quicksum(w[c, t, q, h] for t in O[c]) >= y[q, h] * delta[q][h] for c in C for q in J[c] for h in H),
-    name="R9"
-)
-
-
-# R10: Activación de Z si y solo si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora
-R10 = m.addConstrs(
-    (w[c, t, q, h] * data['theta_{q,h}'][h][q] == z[q, h]  for c in C for t in O[c] for q in J[c] for h in H),
-    name="R9"
-)
-
-# R11: Movimiento entre cuadrantes vecinos
+# R9: Movimiento entre cuadrantes vecinos
 for c in C:
     for t in O[c]:
         for q in J[c]:
@@ -142,7 +125,7 @@ for c in C:
                 if no_vecinos:
                     m.addConstr(
                         w[c, t, q, h] + quicksum(w[c, t, q_p, h+1] for q_p in no_vecinos) <= 1,
-                        name="R11")
+                        name="R9")
 
 # Definimos la función objetivo
 m.setObjective(
@@ -153,9 +136,6 @@ m.setObjective(
 # Resolvemos el modelo
 
 m.optimize()
-
-end_time = time.time()
-elapsed_time = round((end_time - start_time), 2)
 
 # Imprimimos los resultados
 if m.status == GRB.OPTIMAL:
@@ -204,6 +184,5 @@ if m.status == GRB.OPTIMAL:
     print(f'Total de crímenes en los que hubo alguna patrulla en el mismo cuadrante = {patrulla_presente}\n')
 
     print('-' * 80)
-    print(f"\nSolución óptima encontrada en {elapsed_time}s: {int(m.ObjVal)} unidades de felicidad\n")
+    print(f"\nSolución óptima encontrada en {round(m.runtime, 2)}s: {int(m.ObjVal)} unidades de felicidad\n")
     print('-' * 80)
-
