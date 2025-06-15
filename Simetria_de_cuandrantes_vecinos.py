@@ -26,7 +26,9 @@ for x in range(len_x):
         if (isinstance(seguro(df.iloc[x, y]), int)  and not isinstance(seguro(df.iloc[y, x]), int)) or (
             not isinstance(seguro(df.iloc[x, y]), int) and isinstance(seguro(df.iloc[y, x]), int)
         ):
-            print(x, y)
+            print("pos:")
+            print(x+1, y+1)
+            print("val:")
             print(df.iloc[x,y], df.iloc[y, x])
 
 print("fin")
