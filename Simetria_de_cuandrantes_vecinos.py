@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 
-
+'''
 def os_join(path):
     return os.path.join("data", path)
 
@@ -32,3 +32,24 @@ for x in range(len_x):
             print(df.iloc[x,y], df.iloc[y, x])
 
 print("fin")
+'''
+
+### demanda por cuadrante
+import random
+numeros = []
+for i in range(1, 81):
+    fila = []
+    for i in range(1, 25):
+        hora = random.randint(1, 3) # Randint por cuadrante y por hora
+        fila.append(hora)
+    numeros.append(fila)
+
+cont = 1
+for linea in numeros:
+    txt = ''
+    for item in linea:
+        txt = txt + str(item) + ','
+    cont += 1
+    txt = txt[0:47]
+    print(txt)
+print(cont)
