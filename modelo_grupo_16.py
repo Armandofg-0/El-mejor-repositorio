@@ -67,13 +67,14 @@ y = m.addVars(Q, H, vtype=GRB.BINARY, name="y")  # 1 si se cumple la demanda en 
 z = m.addVars(Q, H, vtype=GRB.BINARY, name="z")  # 1 si al momento de haber un crimen a la hora *h* en el cuadrante *q*, existe una patrulla en el mismo cuadrante a la misma hora, 0 e.o.c.
 p = m.addVars(C, T, vtype=GRB.BINARY, name="p")  # 1 si la patrulla *t* sale de la comisaría *c*, 0 e.o.c.
 w = m.addVars(((c, t, q, h) for c in C for t in O[c] for q in J[c] for h in H), vtype=GRB.BINARY, name="w")  # 1 si la patrulla *t¨* de la comisaría *c* está en el cuadrante *q* a la hora *h*, 0 e.o.c.
-
+s = m.addVars(C, T, H, vtype=GRB.BINARY, name="s")
 
 # Definimos las restricciones
 
 # R1: Stock máximo de patrullas por comisaría
+
 R1 = m.addConstrs(
-    (quicksum(p[c, t] for t in O[c]) <= data['upsilon_c'][c-1] for c in C),
+    (quicksum(p[c, t] for t in O[c]) <= data['upsilon_c'][c-1] for c in C for h in H),
     name="R1"
 )
 
@@ -86,11 +87,10 @@ R2 = m.addConstrs(
 # R3: Restricción de presupuesto    
 R3 = m.addConstrs(
     (quicksum(data['K'] * p[c, t] + quicksum(w[c, t, q, h] * data['k'] 
-    for h in H for q in J[c]) for t in O[c]) <= data['rho_c'][c-1]for c in C
+    for h in H for q in J[c]) for t in O[c]) <= data['rho_c'][c-1] for c in C for h in H
     ),
     name="R3"
 )
-
 
 # R4: Una patrulla solo puede estar en un cuadrante a la vez
 R4 = m.addConstrs(
@@ -108,7 +108,7 @@ R5 = m.addConstrs(
 
 # R6 No se puede patrullar si no se sale de la comisaría
 R6 = m.addConstrs(
-    (quicksum(w[c, t, q, h] for q in J[c]) <= p[c, t] * Big_M for c in C for t in O[c] for h in H),
+    (quicksum(w[c, t, q, h] for q in J[c]) <= p[c, t] * Big_M  for c in C for t in O[c] for h in H),
     name="R6"
 )
 
@@ -134,6 +134,58 @@ for c in C:
                     m.addConstr(
                         w[c, t, q, h] + quicksum(w[c, t, q_p, h+1] for q_p in no_vecinos) <= 1,
                         name="R9")
+'''
+# R10: Movimiento entre horas consecutivas
+for c in C:
+    for t in O[c]:
+        for q in J[c]:
+            for h in H[:-1]:  
+                m.addConstr(
+                    w[c, t, q, h + 1] <= w[c, t, q, h] if q in V[q] else 0,
+                    name="R10"
+                )
+'''
+# Restricción: Una patrulla no puede estar en el mismo cuadrante en horas consecutivas
+for c in C:
+    for t in O[c]:
+        for q in J[c]:
+            for h in H[:-1]:  # hasta la penúltima hora
+                m.addConstr(
+                    w[c, t, q, h] + w[c, t, q, h+1] <= 1,
+                    name=f"R11_c{c}_t{t}_q{q}_h{h}"
+                )
+
+MAX_HORAS_SEGUIDAS = 2  # Definimos el máximo de horas seguidas que una patrulla puede estar en un cuadrante
+for c in C:
+    for t in O[c]:
+        for q in J[c]:
+            for h in range(1, 23 - MAX_HORAS_SEGUIDAS + 2):  # Asegura que no nos pasemos del rango
+                m.addConstr(
+                    quicksum(w[c, t, q, h + offset] for offset in range(MAX_HORAS_SEGUIDAS + 1)) <= MAX_HORAS_SEGUIDAS,
+                    name=f"R10_no_masde{MAX_HORAS_SEGUIDAS}_horas_seguidas_c{c}_t{t}_q{q}_h{h}")
+
+for c in C:
+    for t in O[c]:
+        for h in H:
+            if h == 1:
+                m.addConstr(
+                    s[c, t, h] >= quicksum(w[c, t, q, h] for q in J[c]),
+                    name=f"R_salida_inicio_c{c}_t{t}_h{h}"
+                )
+            else:
+                m.addConstr(
+                    s[c, t, h] >= quicksum(w[c, t, q, h] for q in J[c]) - quicksum(w[c, t, q, h - 1] for q in J[c]),
+                    name=f"R_salida_cambio_c{c}_t{t}_h{h}"
+                )
+
+for c in C:
+    for t in O[c]:
+        m.addConstr(
+            quicksum(s[c, t, h] for h in H) <= 1,
+            name=f"R_salida_maxima_c{c}_t{t}"
+        )
+
+
 
 # Definimos la función objetivo
 m.setObjective(
@@ -151,9 +203,13 @@ if m.status == GRB.OPTIMAL:
     print('-' * 80)
     print(f'\nVariable w_[c, t, q, h]:')
     print(f'Recorrido de cada patrulla a lo largo de las horas del día:\n')
-    for c, t, q, h in w.keys(): # w.keys() devuelve todas las tuplas de índices para las que 'w' existe
-        if w[c, t, q, h].X == 1: # Si la variable binaria es 1 (o muy cerca de 1)
-            print(f" Patrulla {t} de la comisaría {c} está en el cuadrante {q} a la hora {h}")
+
+    for c in C:
+        for t in O[c]:
+            for h in H:
+                for q in J[c]:
+                    if w[c, t, q, h].X == 1: # Si la variable binaria es 1 (o muy cerca de 1)
+                        print(f" Patrulla {t} de la comisaría {c} a la hora {h} está en el cuadrante {q} ")
 
     print()
     print('-' * 80)
