@@ -177,7 +177,7 @@ m.setObjective(
 
 
 # Resolvemos el modelo
-def resolver()
+
 m.optimize()
 
 # Imprimimos los resultados
