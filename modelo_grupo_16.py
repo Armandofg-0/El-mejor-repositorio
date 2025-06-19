@@ -30,7 +30,7 @@ data['patrullas'] = pd.read_csv(os_join('patrullas.csv')).squeeze().values
 Q = range(1, len(data["cuadrantes"]) + 1) # Conjunto de cuadrantes
 C = range(1, len(data["comisarias"]) + 1) # Conjunto de comisarías
 T = range(1 ,len(data['patrullas']) + 1) # Conjunto de patrullas
-H = range(1, 25) # Conjunto de horas {1, 2, ..., 24}
+H = range(0, 24) # Conjunto de horas {1, 2, ..., 24}
 J = comisarias.groupby('id_comisaría_asociada')['id_cuadrante'].apply(list).to_dict() # Subconjunto de cuadrantes asignados a cada comisaría
 O = patrullas.groupby('id_comisaría_asignada')['id_patrulla'].apply(list).to_dict() # Subconjunto de cuadrantes asignados a cada comisaría
 V = {}
@@ -154,7 +154,7 @@ for c in C:
 for c in C:
     for t in O[c]:
         for h in H:
-            if h == 1:
+            if h == 0:
                 m.addConstr(
                     s[c, t, h] >= quicksum(w[c, t, q, h] for q in J[c]),
                     name=f"R_salida_inicio_c{c}_t{t}_h{h}"
