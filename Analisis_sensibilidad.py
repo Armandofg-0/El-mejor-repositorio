@@ -3,7 +3,7 @@ import os
 from gurobipy import Model, GRB, quicksum
 
 
-for i in [1.1, 1.2]:
+for var_demanda in [1.2, 1.5]:
     def os_join(path):
         return os.path.join("data", path)
 
@@ -187,9 +187,9 @@ for i in [1.1, 1.2]:
 
         return None
 
-    resolver_sensibilidad(f"Analisis al variar {i-1}%")
+    resolver_sensibilidad(f"Analisis al variar {var_demanda-1}% la demanda")
 
-for i in [0.95, 1.05]:
+for porcentaje in [0.1, 1.9]:
     def os_join(path):
         return os.path.join("data", path)
 
@@ -373,4 +373,4 @@ for i in [0.95, 1.05]:
 
         return None
 
-    resolver_sensibilidad(f"Analisis al variar {i-1}% el presupuesto")
+    resolver_sensibilidad(f"Analisis al variar {(porcentaje-1)*100}% el presupuesto")
