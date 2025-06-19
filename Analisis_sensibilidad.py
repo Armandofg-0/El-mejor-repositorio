@@ -45,7 +45,7 @@ for var_demanda in [1.2, 1.5]:
                 vecinos.append(int(num))  # o int(val) si el número que aparece es el id del vecino
         V[i+1] = vecinos
 
-    demanda_hora = round(pd.read_csv(os_join('demanda_cuadrante_hora.csv'), header=None) * i)
+    demanda_hora = round(pd.read_csv(os_join('demanda_cuadrante_hora.csv'), header=None) * var_demanda)
     delta = {}
     for i, fila in demanda_hora.iterrows():
         demanda = []
@@ -189,7 +189,7 @@ for var_demanda in [1.2, 1.5]:
 
     resolver_sensibilidad(f"Analisis al variar {var_demanda-1}% la demanda")
 
-for porcentaje in [0.1, 1.9]:
+for porcentaje in [0.6, 0.8, 1.5, 2]: ### No cambia
     def os_join(path):
         return os.path.join("data", path)
 
@@ -200,12 +200,11 @@ for porcentaje in [0.1, 1.9]:
     data['Pi_c'] = pd.read_csv(os_join('patrullas.csv'), usecols=['horas_max']).squeeze().values
     data['K'] = pd.read_csv(os_join('costos.csv'), usecols=['costo_fijo']).squeeze()
     data['k'] = pd.read_csv(os_join('costos.csv'), usecols=['costo_por_hora']).squeeze()
-    data['rho_c'] = pd.read_csv(os_join('comisarias.csv'), usecols=['presupuesto_diario_comisaria']).squeeze().values * i
+    data['rho_c'] = pd.read_csv(os_join('comisarias.csv'), usecols=['presupuesto_diario_comisaria']).squeeze().values * porcentaje
     data['theta_{q,h}'] = pd.read_csv(os_join('crimenes_por_hora.csv'), header=0, index_col=0).values
     data['a1'] = pd.read_csv(os_join('ponderadores_fo.csv'), usecols=['a1']).squeeze()
     data['a2'] = pd.read_csv(os_join('ponderadores_fo.csv'), usecols=['a2']).squeeze()
     Big_M = 10000000000  
-
 
 
     c_vecinos = pd.read_csv(os_join('cuadrantes_vecinos.csv'), header=None)
