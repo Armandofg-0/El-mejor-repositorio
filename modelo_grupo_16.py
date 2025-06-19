@@ -172,6 +172,10 @@ m.setObjective(
     GRB.MAXIMIZE
 )
 
+# Analisis de sensibilidad
+
+
+
 # Resolvemos el modelo
 
 m.optimize()
