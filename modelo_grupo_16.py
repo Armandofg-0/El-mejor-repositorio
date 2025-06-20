@@ -9,30 +9,17 @@ def os_join(path):
 
 # Definimos los parámetros
 data = {}
-data["upsilon_c"] = (
-    pd.read_csv(os_join("comisarias.csv"), usecols=["total_patrullas_por_comisaria"])
-    .squeeze()
-    .values
-)
-data["pi_c"] = (
-    pd.read_csv(os_join("patrullas.csv"), usecols=["horas_min"]).squeeze().values
-)
-data["Pi_c"] = (
-    pd.read_csv(os_join("patrullas.csv"), usecols=["horas_max"]).squeeze().values
-)
+data["upsilon_c"] = pd.read_csv(os_join("comisarias.csv"), usecols=["total_patrullas_por_comisaria"]).squeeze().values
+data["pi_c"] = pd.read_csv(os_join("patrullas.csv"), usecols=["horas_min"]).squeeze().values
+data["Pi_c"] = pd.read_csv(os_join("patrullas.csv"), usecols=["horas_max"]).squeeze().values
 data["K"] = pd.read_csv(os_join("costos.csv"), usecols=["costo_fijo"]).squeeze()
 data["k"] = pd.read_csv(os_join("costos.csv"), usecols=["costo_por_hora"]).squeeze()
-data["rho_c"] = (
-    pd.read_csv(os_join("comisarias.csv"), usecols=["presupuesto_diario_comisaria"])
-    .squeeze()
-    .values
-)
-data["theta_{q,h}"] = pd.read_csv(
-    os_join("crimenes_por_hora.csv"), header=0, index_col=0
-).values
+data["rho_c"] = pd.read_csv(os_join("comisarias.csv"), usecols=["presupuesto_diario_comisaria"]).squeeze().values
+data["theta_{q,h}"] = pd.read_csv(os_join("crimenes_por_hora.csv"), header=0, index_col=0).values
 data["a1"] = pd.read_csv(os_join("ponderadores_fo.csv"), usecols=["a1"]).squeeze()
 data["a2"] = pd.read_csv(os_join("ponderadores_fo.csv"), usecols=["a2"]).squeeze()
-Big_M = 10000000000
+sigma = 1 # Horas máximas seguidas de permanencia en un único cuadrante  
+Big_M = 10000000000 
 
 
 c_vecinos = pd.read_csv(os_join("cuadrantes_vecinos.csv"), header=None)
@@ -47,25 +34,19 @@ Q = range(1, len(data["cuadrantes"]) + 1)  # Conjunto de cuadrantes
 C = range(1, len(data["comisarias"]) + 1)  # Conjunto de comisarías
 T = range(1, len(data["patrullas"]) + 1)  # Conjunto de patrullas
 H = range(0, 24)  # Conjunto de horas {1, 2, ..., 24}
-J = (
-    comisarias.groupby("id_comisaría_asociada")["id_cuadrante"].apply(list).to_dict()
-)  # Subconjunto de cuadrantes asignados a cada comisaría
-O = (
-    patrullas.groupby("id_comisaría_asignada")["id_patrulla"].apply(list).to_dict()
-)  # Subconjunto de cuadrantes asignados a cada comisaría
-V = {}
+J = (comisarias.groupby("id_comisaría_asociada")["id_cuadrante"].apply(list).to_dict())  # Subconjunto de cuadrantes asignados a cada comisaría
+O = (patrullas.groupby("id_comisaría_asignada")["id_patrulla"].apply(list).to_dict())  # Subconjunto de cuadrantes asignados a cada comisaría
+V = {} # Subconjunto de cuadrantes vecinos para cada cuadrante
 
 for i, fila in c_vecinos.iterrows():
     vecinos = []
     for j, num in enumerate(fila):
         if num != "-":
-            vecinos.append(
-                int(num)
-            )  # o int(val) si el número que aparece es el id del vecino
+            vecinos.append(int(num))  
     V[i + 1] = vecinos
 
 demanda_hora = pd.read_csv(os_join("demanda_cuadrante_hora.csv"), header=None)
-delta = {}
+delta = {} # Demanda por hora de cada cuadrante
 for i, fila in demanda_hora.iterrows():
     demanda = []
     for j in fila:
@@ -203,29 +184,15 @@ for c in C:
                         name="R10",
                     )
 
-# R11: Una patrulla no puede estar más de *1* hora en un cuadrante
-R11 = m.addConstrs(
-    (
-        w[c, t, q, h] + w[c, t, q, h + 1] <= 1
-        for c in C
-        for t in O[c]
-        for q in J[c]
-        for h in H[:-1]
-    ),
-    name="R11",
-)
-
-"""
-# R11*: Una patrulla no puede estar más de *MAX_HORAS_SEGUIDAS* horas seguidas en un cuadrante
-MAX_HORAS_SEGUIDAS = 2  ### Definir en parámetros??
+# R11: Una patrulla no puede estar más de *sigma* horas seguidas en un cuadrante
 for c in C:
     for t in O[c]:
         for q in J[c]:
-            for h in range(1, 23 - MAX_HORAS_SEGUIDAS + 2):  # Asegura que no nos pasemos del rango
+            for h in range(1, 24 - sigma):  # Asegura que no nos pasemos del rango
                 m.addConstr(
-                    quicksum(w[c, t, q, h + offset] for offset in range(MAX_HORAS_SEGUIDAS + 1)) <= MAX_HORAS_SEGUIDAS,
-                    name=R11)
-"""
+                    quicksum(w[c, t, q, h + k] for k in range(0, sigma + 1)) <= sigma,
+                    name='R11')
+
 
 # R12: Restricción de salida de patrullas
 for c in C:
@@ -305,13 +272,11 @@ if m.status == GRB.OPTIMAL:
 
     patrulla_presente = 0
     patrulla_no_presente = 0
-    for q in Q:
-        for h in H:
-            if data["theta_{q,h}"][q - 1][h - 1] == 1:
-                if z[q, h].X == 1:
-                    patrulla_presente += 1
-                else:
-                    patrulla_no_presente += 1
+    for q, h in z.keys():
+        if z[q, h].X == 1:
+            patrulla_presente += 1
+        else:
+            patrulla_no_presente += 1
 
     print(f"\nVariable z_[q, h]:")
     print(f"\nTotal de crimenes = {patrulla_presente + patrulla_no_presente}")
